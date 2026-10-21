@@ -82,13 +82,31 @@ def save_state(st):
     STATE.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+BOT_MARKERS = (
+    "已接取",
+    "等待负责人",
+    "已被",
+    "待批准",
+    "CI 已开始",
+    "CI 结束",
+    "已触发 CI",
+    "不能**用中文",
+    "负责人已把本任务交给你",
+    "TASK-STATUS",
+)
+
+
 def interesting(body: str) -> bool:
-    if not body:
+    """Only pure short command comments — never bot prose that mentions CLAIM."""
+    if not body or any(m in body for m in BOT_MARKERS):
         return False
-    for line in body.splitlines():
-        if CMD_LINE.match(line.strip()):
-            return True
-    return False
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    if not lines or len(lines) > 3:
+        return False
+    # ignore fenced help blocks with many ticks
+    if body.count("```") >= 2 and len(lines) > 1:
+        return False
+    return any(CMD_LINE.match(ln) for ln in lines)
 
 
 def list_open_issues():
