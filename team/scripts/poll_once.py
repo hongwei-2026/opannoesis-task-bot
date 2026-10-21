@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""One-shot GitCode comment poller for GitHub Actions (no long-running loop).
+"""One-shot GitCode comment poller for GitHub Actions.
 
 Idempotency:
-- Remember every comment id in .poll_state.json (seen).
-- If state is missing/empty (cache miss), BOOTSTRAP: mark all current
-  comments as seen and do NOT reply — never replay history as "new".
-- Also skip comments older than watermarks.since (ISO time).
+- Track comment ids in .poll_state.json.
+- Cold start: mark comments older than LOOKBACK_HOURS as seen (no reply);
+  still handle recent command comments so downtime does not drop CLAIMs.
 """
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 OWNER = os.environ.get("GITCODE_OWNER", "OpenNoesis")
@@ -26,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = Path(os.environ.get("TASK_BOT_POLL_STATE", str(ROOT / ".poll_state.json")))
 SCRIPT = ROOT / "team" / "scripts" / "task_bot.py"
 TRIGGER_CI = ROOT / "team" / "scripts" / "trigger_ci.py"
+LOOKBACK_HOURS = int(os.environ.get("TASK_BOT_LOOKBACK_HOURS", "12"))
 
 CMD_LINE = re.compile(
     r"^\s*(CLAIM|APPROVE_CLAIM|ASSIGN|REJECT_CLAIM|ABANDON|COMPLETE|SCORE|ACCEPT|CI|RUN_CI)"
@@ -51,8 +51,12 @@ def api(path: str):
         return json.loads(r.read().decode("utf-8"))
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def utc_now_s() -> str:
+    return utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_ts(s: str | None) -> datetime | None:
@@ -62,6 +66,7 @@ def parse_ts(s: str | None) -> datetime | None:
         return datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
+
 
 def load_state():
     if STATE.exists():
@@ -98,24 +103,6 @@ def list_comments(n: int):
     if not isinstance(comments, list):
         comments = comments.get("data") or []
     return comments
-
-
-def bootstrap_if_needed(st, issues) -> bool:
-    """If no durable cursor yet, mark everything seen and skip handling."""
-    has_seen = bool(st.get("bootstrapped")) or any(st.get("seen") or {}.values())
-    if has_seen:
-        return False
-    print("[poll] BOOTSTRAP: marking all existing comments as seen (no replay)", flush=True)
-    for issue in issues:
-        n = issue.get("number")
-        if n is None:
-            continue
-        comments = list_comments(n)
-        st.setdefault("seen", {})[str(n)] = [str(c.get("id")) for c in comments if c.get("id") is not None]
-    st["bootstrapped"] = True
-    st["since"] = utc_now()
-    save_state(st)
-    return True
 
 
 def run_comment(issue, comment):
@@ -155,12 +142,14 @@ def main():
     print(f"[poll] one-shot {OWNER}/{REPO}", flush=True)
     st = load_state()
     issues = list_open_issues()
+    cold = not (st.get("bootstrapped") or any((st.get("seen") or {}).values()))
+    cutoff = utc_now() - timedelta(hours=LOOKBACK_HOURS)
+    if cold:
+        print(
+            f"[poll] cold start: skip replies older than {LOOKBACK_HOURS}h, handle recent",
+            flush=True,
+        )
 
-    if bootstrap_if_needed(st, issues):
-        print("[poll] bootstrap complete; wait for NEW comments next run", flush=True)
-        return
-
-    since = parse_ts(st.get("since"))
     handled = 0
     for issue in issues:
         n = issue.get("number")
@@ -172,23 +161,27 @@ def main():
             cid = str(c.get("id"))
             if cid in seen:
                 continue
-            # always remember id first — even if we skip handling
             seen.add(cid)
 
             created = parse_ts(c.get("created_at") or c.get("updated_at"))
-            if since and created and created < since:
-                # older than watermark but unseen id (e.g. pagination race): skip reply
+            # cold start / watermark: do not replay ancient history
+            if created and created < cutoff:
                 continue
+            if st.get("since"):
+                since = parse_ts(st.get("since"))
+                # after warm runs, still allow lookback window for missed schedules
+                # but never go older than cutoff
+                pass
 
             if interesting(c.get("body") or ""):
                 run_comment(issue, c)
                 handled += 1
         st["seen"][str(n)] = list(seen)[-500:]
 
-    st["since"] = utc_now()
+    st["since"] = utc_now_s()
     st["bootstrapped"] = True
     save_state(st)
-    print(f"[poll] done handled={handled}", flush=True)
+    print(f"[poll] done handled={handled} cold={cold}", flush=True)
 
 
 if __name__ == "__main__":
