@@ -161,12 +161,28 @@ def main():
     st = load_state()
     issues = list_open_issues()
     cold = not (st.get("bootstrapped") or any((st.get("seen") or {}).values()))
-    cutoff = utc_now() - timedelta(hours=LOOKBACK_HOURS)
+    # Cold start: NEVER reply — only seed seen ids. Prevents history replay spam.
     if cold:
-        print(
-            f"[poll] cold start: skip replies older than {LOOKBACK_HOURS}h, handle recent",
-            flush=True,
-        )
+        print("[poll] COLD START seed-only (no replies)", flush=True)
+        for issue in issues:
+            n = issue.get("number")
+            if n is None:
+                continue
+            comments = list_comments(n)
+            st.setdefault("seen", {})[str(n)] = [
+                str(c.get("id")) for c in comments if c.get("id") is not None
+            ]
+        st["since"] = utc_now_s()
+        st["bootstrapped"] = True
+        save_state(st)
+        print("[poll] seed done; next run handles NEW comments only", flush=True)
+        return
+
+    bot_logins = {
+        x.strip().lower()
+        for x in (os.environ.get("TASK_BOT_LOGINS") or "hongwei-2026").split(",")
+        if x.strip()
+    }
 
     handled = 0
     for issue in issues:
@@ -181,17 +197,19 @@ def main():
                 continue
             seen.add(cid)
 
-            created = parse_ts(c.get("created_at") or c.get("updated_at"))
-            # cold start / watermark: do not replay ancient history
-            if created and created < cutoff:
-                continue
-            if st.get("since"):
-                since = parse_ts(st.get("since"))
-                # after warm runs, still allow lookback window for missed schedules
-                # but never go older than cutoff
-                pass
+            login = ((c.get("user") or {}).get("login") or "").lower()
+            body = c.get("body") or ""
+            # never treat our own auto-replies as commands (even if they contain CLAIM text)
+            if login in bot_logins and not (
+                len([ln for ln in body.splitlines() if ln.strip()]) <= 2
+                and interesting(body)
+                and not any(m in body for m in BOT_MARKERS)
+            ):
+                # allow leader/bot account pure commands like APPROVE_CLAIM; skip prose
+                if any(m in body for m in BOT_MARKERS) or len(body) > 120:
+                    continue
 
-            if interesting(c.get("body") or ""):
+            if interesting(body):
                 run_comment(issue, c)
                 handled += 1
         st["seen"][str(n)] = list(seen)[-500:]
@@ -199,7 +217,7 @@ def main():
     st["since"] = utc_now_s()
     st["bootstrapped"] = True
     save_state(st)
-    print(f"[poll] done handled={handled} cold={cold}", flush=True)
+    print(f"[poll] done handled={handled}", flush=True)
 
 
 if __name__ == "__main__":
