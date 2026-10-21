@@ -1,0 +1,75 @@
+# GitHub Actions ↔ GitCode Issues
+# 定时扫描 OpenNoesis/vllm 评论，用 GitCode PAT 发回复（不依赖本机、不依赖 GitCode CI）
+name: gitcode-task-bot
+
+on:
+  schedule:
+    # 每 5 分钟（GitHub schedule 最短实用间隔）
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+  # 每天 UTC 02:00 跑一次 14 天释放
+  # （与 comment 轮询合并在同一个 workflow 的不同 job）
+
+permissions:
+  contents: write
+
+jobs:
+  poll-comments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: .poll_state.json
+          key: poll-state-${{ github.repository }}
+          restore-keys: |
+            poll-state-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Poll GitCode & reply
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITCODE_OWNER: OpenNoesis
+          GITCODE_REPO: vllm
+          TASK_BOT_NO_GIT: "1"
+          TASK_BOT_POLL_STATE: ${{ github.workspace }}/.poll_state.json
+        run: python team/scripts/poll_once.py
+
+      - name: Persist poll cursor
+        if: always()
+        run: |
+          if [ -f .poll_state.json ]; then
+            echo "poll state bytes=$(wc -c < .poll_state.json)"
+          fi
+
+  stale-release:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # 仅在整点附近的 schedule 里跑（避免每 5 分钟释放扫描）
+    # workflow_dispatch 也可手动跑
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 14-day idle release
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * *'
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITCODE_OWNER: OpenNoesis
+          GITCODE_REPO: vllm
+          TASK_BOT_NO_GIT: "1"
+          TASK_BOT_MODE: stale
+        run: |
+          # schedule 只有 */5，用小时判断：仅 UTC 02:00–02:04 执行
+          H=$(date -u +%H)
+          M=$(date -u +%M)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || { [ "$H" = "02" ] && [ "$M" -lt 5 ]; }; then
+            python team/scripts/task_bot.py
+          else
+            echo "skip stale this tick"
+          fi

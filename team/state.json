@@ -1,0 +1,29 @@
+{
+  "tasks": {
+    "10": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "hongwei-2026",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T05:12:20Z"
+    },
+    "11": {
+      "status": "assigned",
+      "assignee": "dsfdscsd",
+      "pending_claimer": null,
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T05:12:56Z"
+    },
+    "7": {
+      "status": "assigned",
+      "assignee": "gcw_3Fe74nGB",
+      "pending_claimer": null,
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T05:28:27Z"
+    }
+  },
+  "updated_at": "2026-10-21T05:28:27Z"
+}

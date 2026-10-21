@@ -1,0 +1,12 @@
+{
+  "leaders": ["hongwei-2026"],
+  "leader_display_name": "hongwei-2026",
+  "award_commands": ["SCORE", "ACCEPT"],
+  "score_defaults": {
+    "default": 10
+  },
+  "complete_requires": ["pr"],
+  "stale_days": 14,
+  "parent_issue": 9,
+  "skip_claim_on_issues": [9]
+}
