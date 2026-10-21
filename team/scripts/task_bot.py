@@ -655,11 +655,16 @@ def main() -> None:
         handle_assigned_event(event)
         return
 
-    event_path = os.environ.get("GITHUB_EVENT_PATH") or os.environ.get("ATOMGIT_EVENT_PATH")
-    if event_path and Path(event_path).exists():
+    # Prefer synthetic env event when COMMENT_BODY/ISSUE_NUMBER set.
+    # On GitHub Actions, GITHUB_EVENT_PATH is always present (push/schedule) and
+    # must NOT override the poller-injected comment payload.
+    use_env = os.environ.get("COMMENT_BODY") is not None and os.environ.get("ISSUE_NUMBER")
+    event_path = os.environ.get("ATOMGIT_EVENT_PATH") or (
+        None if use_env else os.environ.get("GITHUB_EVENT_PATH")
+    )
+    if event_path and Path(event_path).exists() and not use_env:
         event = json.loads(Path(event_path).read_text(encoding="utf-8"))
     else:
-        # AtomGit: workflow writes synthetic event
         event = {
             "action": "created",
             "comment": {

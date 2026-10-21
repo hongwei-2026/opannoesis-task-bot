@@ -59,12 +59,14 @@ jobs:
           fi
           git config user.name "opannoesis-task-bot"
           git config user.email "bot@users.noreply.github.com"
+          git pull --rebase --autostash origin main || git pull --rebase origin main || true
           git add .poll_state.json
           if git diff --cached --quiet; then
             echo "poll state unchanged"
           else
-            git commit -m "chore: update poll cursor"
-            git push
+            git commit -m "chore: update poll cursor" || true
+            git pull --rebase origin main || true
+            git push || git push --force-with-lease || echo "push failed; cache still has state"
           fi
 
   stale-release:
