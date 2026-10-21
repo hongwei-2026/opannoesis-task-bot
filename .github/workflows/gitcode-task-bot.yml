@@ -33,10 +33,13 @@ jobs:
       - name: Poll GitCode & reply
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
           GITCODE_OWNER: OpenNoesis
           GITCODE_REPO: vllm
           TASK_BOT_NO_GIT: "1"
           TASK_BOT_POLL_STATE: ${{ github.workspace }}/.poll_state.json
+          CI_GITHUB_REPO: hongwei-2026/opannoesis-vllm-ci
+          CI_WORKFLOW_FILE: vllm-gate.yml
         run: python team/scripts/poll_once.py
 
       - name: Persist poll cursor

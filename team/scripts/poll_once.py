@@ -19,10 +19,12 @@ STATE = Path(os.environ.get("TASK_BOT_POLL_STATE", str(ROOT / ".poll_state.json"
 SCRIPT = ROOT / "team" / "scripts" / "task_bot.py"
 
 CMD_LINE = re.compile(
-    r"^\s*(CLAIM|APPROVE_CLAIM|ASSIGN|REJECT_CLAIM|ABANDON|COMPLETE|SCORE|ACCEPT)"
+    r"^\s*(CLAIM|APPROVE_CLAIM|ASSIGN|REJECT_CLAIM|ABANDON|COMPLETE|SCORE|ACCEPT|CI|RUN_CI)"
     r"(?:\s+@?([A-Za-z0-9_.-]+))?(?:\s+(\d+(?:\.\d+)?))?\s*$",
     re.I,
 )
+CI_LINE = re.compile(r"^\s*(CI|RUN_CI)(?:\s+(\S+))?\s*$", re.I)
+TRIGGER_CI = ROOT / "team" / "scripts" / "trigger_ci.py"
 
 
 def token() -> str:
@@ -61,6 +63,7 @@ def interesting(body: str) -> bool:
 
 
 def run_comment(issue, comment):
+    body = comment.get("body") or ""
     env = os.environ.copy()
     env.update(
         {
@@ -69,7 +72,7 @@ def run_comment(issue, comment):
             "GITCODE_REPO": REPO,
             "TASK_BOT_NO_GIT": "1",
             "TASK_BOT_MODE": "comment",
-            "COMMENT_BODY": comment.get("body") or "",
+            "COMMENT_BODY": body,
             "COMMENT_USER": (comment.get("user") or {}).get("login") or "",
             "COMMENT_USER_TYPE": (comment.get("user") or {}).get("type") or "User",
             "ISSUE_NUMBER": str(issue.get("number")),
@@ -77,8 +80,19 @@ def run_comment(issue, comment):
             "ISSUE_BODY": issue.get("body") or "",
         }
     )
-    preview = (env["COMMENT_BODY"] or "").replace("\n", " ")[:80]
+    preview = body.replace("\n", " ")[:80]
     print(f"[poll] #{issue['number']} @{env['COMMENT_USER']}: {preview!r}", flush=True)
+
+    # CI / RUN_CI [ref] — trigger GitHub vllm-gate, post run link on GitCode
+    for line in body.splitlines():
+        m = CI_LINE.match(line.strip())
+        if m:
+            env["CI_REF"] = m.group(2) or "main"
+            subprocess.run(
+                [sys.executable, str(TRIGGER_CI)], cwd=str(ROOT), env=env, check=False
+            )
+            return
+
     subprocess.run([sys.executable, str(SCRIPT)], cwd=str(ROOT), env=env, check=False)
 
 

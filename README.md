@@ -24,6 +24,20 @@ GitHub Actions 每 5 分钟扫一次 GitCode API
 
 `CLAIM` · `APPROVE_CLAIM @id` · `ASSIGN @id` · `ABANDON` · `COMPLETE` · `SCORE`
 
+### 触发 CI（仅命令触发，不定时跑）
+
+在 GitCode Issue 评论单独一行：
+
+```text
+CI
+```
+
+或指定分支：`CI main`
+
+机器人会触发 GitHub `opannoesis-vllm-ci` 的 `vllm-gate`，并在 Issue 里贴上运行链接。
+
+Secret 另需：`GH_DISPATCH_TOKEN`（GitHub PAT，`repo` + `workflow`）。
+
 ## 手动触发
 
 Actions → **gitcode-task-bot** → Run workflow
