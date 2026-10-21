@@ -400,26 +400,31 @@ def handle_comment_event(event: dict) -> None:
         if is_leader(login, config):
             print("ignore leader CLAIM")
             return
+        holder = (task.get("assignee") or "").lower()
+        pending = (task.get("pending_claimer") or "").lower()
+        me = login.lower()
         if task.get("status") in ("assigned", "pending_accept", "awarded"):
-            reply(f"已被 `@{task.get('assignee')}` 接取（`{task.get('status')}`）。")
+            # 持有者自己重复 CLAIM / 他人再 CLAIM：少说话
+            if holder == me:
+                print("ignore self re-CLAIM while holding")
+                return
+            reply(f"任务已有人在做（`@{task.get('assignee')}`），暂不可 CLAIM。")
             return
-        if task.get("status") == "pending_claim" and task.get("pending_claimer"):
-            if task["pending_claimer"].lower() == login.lower():
-                reply(f"已接取，等负责人批准即可。")
-            else:
-                reply(f"待批准：`@{task['pending_claimer']}`，暂不可 CLAIM。")
+        if task.get("status") == "pending_claim" and pending:
+            if pending == me:
+                print("ignore duplicate pending CLAIM")
+                return
+            reply(f"已有人在等批准（`@{task.get('pending_claimer')}`），暂不可 CLAIM。")
             return
         blockers = find_blockers(state, login, exclude=issue_n)
         if blockers:
             ids = ", ".join(f"#{n}" for n, _, _ in blockers)
-            reply(f"你还有未完成任务（{ids}），先 `COMPLETE`/`ABANDON` 再 CLAIM。")
+            reply(f"你还有未完成任务（{ids}），先 `COMPLETE` 或 `ABANDON` 再 CLAIM。")
             return
         task["status"] = "pending_claim"
         task["pending_claimer"] = login
         persist(f"bot: CLAIM #{issue_n} by @{login}")
-        reply(
-            f"已接取，等待负责人 `APPROVE_CLAIM` / `ASSIGN @{login}`。分值 **{task['score']}**。"
-        )
+        reply(f"已记录接取，请负责人 `APPROVE_CLAIM` 或 `ASSIGN @{login}`。")
         return
 
     if cmd in ("APPROVE_CLAIM", "ASSIGN"):
@@ -439,10 +444,7 @@ def handle_comment_event(event: dict) -> None:
         task["pending_claimer"] = None
         persist(f"bot: {cmd} #{issue_n} -> @{target}")
         reply(
-            f"**负责人已把本任务交给你。** 正式归属 `@{target}`（标题已标 `[claimed:@{target}]`）。\n"
-            f"分值 **{task['score']}**。完成后评论：\n"
-            f"```text\nCOMPLETE\nPR: <你的实现PR链接>\n```\n"
-            f"放弃请 `ABANDON`。",
+            f"已交给 `@{target}`。完成后发：\n```text\nCOMPLETE\nPR: <链接>\n```",
             new_title=set_title_claimed(title, target),
         )
         return
@@ -479,19 +481,21 @@ def handle_comment_event(event: dict) -> None:
 
     if cmd == "COMPLETE":
         if not task.get("assignee") or task["assignee"].lower() != login.lower():
-            reply("只有正式持有者可以 `COMPLETE`（需先经 `APPROVE_CLAIM` / `ASSIGN`）。")
+            # 负责人误发 COMPLETE：静默；其他人一句说明
+            if is_leader(login, config):
+                print("ignore leader COMPLETE")
+                return
+            reply("需先成为任务持有者后再 `COMPLETE`，并附上 `PR: <链接>`。")
             return
         pr = extract_pr(comment_body)
         if not pr:
-            reply("缺少实现 PR。请按格式重发：\n```text\nCOMPLETE\nPR: https://gitcode.com/.../pulls/N\n```")
+            reply("请带上实现 PR，例如：\n```text\nCOMPLETE\nPR: https://gitcode.com/.../pulls/N\n```")
             return
         task["status"] = "pending_accept"
         task["pr"] = pr
         persist(f"bot: COMPLETE #{issue_n}")
-        reply(
-            f"**已提交完成，等待负责人验收。** PR：{pr}\n"
-            f"负责人请评论 `SCORE {task['score']}` 或 `ACCEPT`。"
-        )
+        reply(f"已提交完成，PR：{pr}。负责人可用 `SCORE` / `ACCEPT` 验收。")
+
         return
 
     if cmd in ("SCORE", "ACCEPT"):
