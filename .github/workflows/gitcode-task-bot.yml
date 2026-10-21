@@ -25,15 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # cache 作加速；真正防回放靠仓库内 .poll_state.json + bootstrap
-      - uses: actions/cache@v4
-        with:
-          path: .poll_state.json
-          key: poll-state-${{ github.repository }}-${{ github.run_id }}
-          restore-keys: |
-            poll-state-${{ github.repository }}-
-            poll-state-
-
+      # 只用仓库里的 .poll_state.json（cache 会盖掉已提交的 cursor，导致漏回）
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -49,7 +41,6 @@ jobs:
           CI_GITHUB_REPO: hongwei-2026/opannoesis-vllm-ci
           CI_WORKFLOW_FILE: vllm-gate.yml
         run: python team/scripts/poll_once.py
-
       - name: Commit poll cursor (durable, no history replay)
         if: always()
         run: |
