@@ -1,31 +1,32 @@
 # GitHub Actions ↔ GitCode Issues
-# 定时扫描 OpenNoesis/vllm 评论，用 GitCode PAT 发回复（不依赖本机、不依赖 GitCode CI）
 name: gitcode-task-bot
 
 on:
   schedule:
-    # GitHub 对过密 cron 可能降频；用 */10 更稳，并保留手动触发
     - cron: "*/10 * * * *"
   workflow_dispatch:
-  # 推送本仓也跑一轮，避免 schedule 长时间不触发
   push:
     branches: [main]
     paths:
-      - "team/**"
+      - "team/scripts/**"
       - ".github/workflows/gitcode-task-bot.yml"
-  # 每天 UTC 02:00 跑一次 14 天释放
-  # （与 comment 轮询合并在同一个 workflow 的不同 job）
 
 permissions:
   contents: write
+
+# 同时只跑一轮，避免两个 job 抢推 .poll_state.json
+concurrency:
+  group: gitcode-task-bot-poll
+  cancel-in-progress: false
 
 jobs:
   poll-comments:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 只用仓库里的 .poll_state.json（cache 会盖掉已提交的 cursor，导致漏回）
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -41,37 +42,54 @@ jobs:
           CI_GITHUB_REPO: hongwei-2026/opannoesis-vllm-ci
           CI_WORKFLOW_FILE: vllm-gate.yml
         run: python team/scripts/poll_once.py
-      - name: Commit poll cursor (durable, no history replay)
+
+      - name: Commit poll cursor
         if: always()
         run: |
+          set -euo pipefail
           if [ ! -f .poll_state.json ]; then
             echo "no poll state"
             exit 0
           fi
           git config user.name "opannoesis-task-bot"
           git config user.email "bot@users.noreply.github.com"
-          git pull --rebase --autostash origin main || git pull --rebase origin main || true
+
+          # 只提交 cursor；忽略 task_bot 可能改动的其它文件
           git add .poll_state.json
           if git diff --cached --quiet; then
             echo "poll state unchanged"
-          else
-            git commit -m "chore: update poll cursor" || true
-            git pull --rebase origin main || true
-            git push || git push --force-with-lease || echo "push failed; cache still has state"
+            exit 0
+          fi
+          git commit -m "chore: update poll cursor"
+
+          # 并发推送时 rebase 重试，失败不让整次 CI 红（cursor 下轮还会写）
+          ok=0
+          for i in 1 2 3 4 5; do
+            git fetch origin main
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              ok=1
+              echo "pushed poll cursor (try $i)"
+              break
+            fi
+            echo "push conflict, retry $i"
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 2))
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::warning::poll cursor push failed after retries; next run will continue"
+            exit 0
           fi
 
   stale-release:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # 仅在整点附近的 schedule 里跑（避免每 5 分钟释放扫描）
-    # workflow_dispatch 也可手动跑
+    needs: []
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: 14-day idle release
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * *'
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
           GITCODE_OWNER: OpenNoesis
@@ -79,10 +97,9 @@ jobs:
           TASK_BOT_NO_GIT: "1"
           TASK_BOT_MODE: stale
         run: |
-          # schedule 只有 */5，用小时判断：仅 UTC 02:00–02:04 执行
           H=$(date -u +%H)
           M=$(date -u +%M)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || { [ "$H" = "02" ] && [ "$M" -lt 5 ]; }; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || { [ "$H" = "02" ] && [ "$M" -lt 10 ]; }; then
             python team/scripts/task_bot.py
           else
             echo "skip stale this tick"
