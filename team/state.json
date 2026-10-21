@@ -33,12 +33,12 @@
       "last_activity": "2026-10-21T08:58:34Z"
     },
     "12": {
-      "status": "pending_claim",
-      "assignee": null,
-      "pending_claimer": "gcw_a7V2QvoC",
+      "status": "assigned",
+      "assignee": "luo1431578927",
+      "pending_claimer": null,
       "score": 10,
       "pr": null,
-      "last_activity": "2026-10-21T08:58:42Z"
+      "last_activity": "2026-10-21T13:00:06Z"
     },
     "8": {
       "status": "pending_claim",
@@ -57,5 +57,5 @@
       "last_activity": "2026-10-21T08:59:24Z"
     }
   },
-  "updated_at": "2026-10-21T08:59:24Z"
+  "updated_at": "2026-10-21T13:00:06Z"
 }

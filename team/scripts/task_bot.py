@@ -193,6 +193,17 @@ def set_title_claimed(title: str, login: str | None) -> str:
     return f"{base} [claimed:@{login}]"
 
 
+def sync_task_from_title(title: str, task: dict) -> None:
+    """Title [claimed:@user] is source of truth when state.json lagged."""
+    m = CLAIMED_TAG_RE.search(title or "")
+    if not m:
+        return
+    holder = m.group(1)
+    task["assignee"] = holder
+    task["pending_claimer"] = None
+    if task.get("status") in (None, "open", "pending_claim"):
+        task["status"] = "assigned"
+
 def upsert_block(body: str, start: str, end: str, block: str) -> str:
     body = body or ""
     if start in body and end in body:
@@ -374,6 +385,7 @@ def handle_comment_event(event: dict) -> None:
     title = issue.get("title") or ""
     body = issue.get("body") or ""
     leader_name = config.get("leader_display_name", "负责人")
+    sync_task_from_title(title, task)
 
     def persist(msg: str):
         state["updated_at"] = utc_now()
@@ -404,17 +416,20 @@ def handle_comment_event(event: dict) -> None:
         pending = (task.get("pending_claimer") or "").lower()
         me = login.lower()
         if task.get("status") in ("assigned", "pending_accept", "awarded"):
-            # 持有者自己重复 CLAIM / 他人再 CLAIM：少说话
             if holder == me:
                 print("ignore self re-CLAIM while holding")
                 return
-            reply(f"任务已有人在做（`@{task.get('assignee')}`），暂不可 CLAIM。")
+            reply(
+                f"这个任务已被 `@{task.get('assignee')}` 接取，请换其他开放任务。"
+            )
             return
         if task.get("status") == "pending_claim" and pending:
             if pending == me:
                 print("ignore duplicate pending CLAIM")
                 return
-            reply(f"已有人在等批准（`@{task.get('pending_claimer')}`），暂不可 CLAIM。")
+            reply(
+                f"这个任务已被 `@{task.get('pending_claimer')}` 申请，正在等批准，请换其他任务。"
+            )
             return
         blockers = find_blockers(state, login, exclude=issue_n)
         if blockers:
@@ -435,6 +450,8 @@ def handle_comment_event(event: dict) -> None:
         if not target:
             reply("没有指定接取人。用法：`APPROVE_CLAIM @用户` 或先让队员 `CLAIM`。")
             return
+        # strip @ if present
+        target = target.lstrip("@")
         blockers = find_blockers(state, target, exclude=issue_n)
         if blockers:
             reply(f"**不能批准。** `@{target}` 仍有未完成任务（一人一任务）。")
@@ -444,7 +461,7 @@ def handle_comment_event(event: dict) -> None:
         task["pending_claimer"] = None
         persist(f"bot: {cmd} #{issue_n} -> @{target}")
         reply(
-            f"已交给 `@{target}`。完成后发：\n```text\nCOMPLETE\nPR: <链接>\n```",
+            f"已交给 `@{target}`（正式接取）。其他人请换任务。完成后发：\n```text\nCOMPLETE\nPR: <链接>\n```",
             new_title=set_title_claimed(title, target),
         )
         return
