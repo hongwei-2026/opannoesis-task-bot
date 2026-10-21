@@ -23,7 +23,39 @@
       "score": 10,
       "pr": null,
       "last_activity": "2026-10-21T05:28:27Z"
+    },
+    "14": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "gcw_Tl5l7QQq",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T08:58:34Z"
+    },
+    "12": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "gcw_a7V2QvoC",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T08:58:42Z"
+    },
+    "8": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "jingdi0112",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T08:59:06Z"
+    },
+    "6": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "gcw_gPxDGQvv",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-21T08:59:24Z"
     }
   },
-  "updated_at": "2026-10-21T05:28:27Z"
+  "updated_at": "2026-10-21T08:59:24Z"
 }

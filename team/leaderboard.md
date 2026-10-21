@@ -12,6 +12,10 @@
 
 ## 进行中
 
+- @gcw_gPxDGQvv · #6 · 待批准 · 分值 10
 - @gcw_3Fe74nGB · #7 · `assigned` · 分值 10
+- @jingdi0112 · #8 · 待批准 · 分值 10
 - @hongwei-2026 · #10 · 待批准 · 分值 10
 - @dsfdscsd · #11 · `assigned` · 分值 10
+- @gcw_a7V2QvoC · #12 · 待批准 · 分值 10
+- @gcw_Tl5l7QQq · #14 · 待批准 · 分值 10
