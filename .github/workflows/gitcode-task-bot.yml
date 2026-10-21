@@ -19,11 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cache 作加速；真正防回放靠仓库内 .poll_state.json + bootstrap
       - uses: actions/cache@v4
         with:
           path: .poll_state.json
-          key: poll-state-${{ github.repository }}
+          key: poll-state-${{ github.repository }}-${{ github.run_id }}
           restore-keys: |
+            poll-state-${{ github.repository }}-
             poll-state-
 
       - uses: actions/setup-python@v5
@@ -42,11 +44,21 @@ jobs:
           CI_WORKFLOW_FILE: vllm-gate.yml
         run: python team/scripts/poll_once.py
 
-      - name: Persist poll cursor
+      - name: Commit poll cursor (durable, no history replay)
         if: always()
         run: |
-          if [ -f .poll_state.json ]; then
-            echo "poll state bytes=$(wc -c < .poll_state.json)"
+          if [ ! -f .poll_state.json ]; then
+            echo "no poll state"
+            exit 0
+          fi
+          git config user.name "opannoesis-task-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add .poll_state.json
+          if git diff --cached --quiet; then
+            echo "poll state unchanged"
+          else
+            git commit -m "chore: update poll cursor"
+            git push
           fi
 
   stale-release:
