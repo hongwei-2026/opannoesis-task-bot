@@ -55,7 +55,15 @@
       "score": 10,
       "pr": null,
       "last_activity": "2026-10-21T08:59:24Z"
+    },
+    "15": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "gcw_a7V2QvoC",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-22T05:27:19Z"
     }
   },
-  "updated_at": "2026-10-21T13:00:06Z"
+  "updated_at": "2026-10-22T05:27:19Z"
 }
