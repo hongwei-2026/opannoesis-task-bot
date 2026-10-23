@@ -9,12 +9,12 @@
       "last_activity": "2026-10-21T05:12:20Z"
     },
     "11": {
-      "status": "assigned",
+      "status": "pending_accept",
       "assignee": "dsfdscsd",
       "pending_claimer": null,
       "score": 10,
-      "pr": null,
-      "last_activity": "2026-10-21T05:12:56Z"
+      "pr": "https://gitcode.com/OpenNoesis/vllm/merge_requests/3",
+      "last_activity": "2026-10-23T15:52:06Z"
     },
     "7": {
       "status": "assigned",
@@ -65,5 +65,5 @@
       "last_activity": "2026-10-22T05:27:19Z"
     }
   },
-  "updated_at": "2026-10-22T05:27:19Z"
+  "updated_at": "2026-10-23T15:52:06Z"
 }
