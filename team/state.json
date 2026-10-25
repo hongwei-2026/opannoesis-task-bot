@@ -63,7 +63,15 @@
       "score": 10,
       "pr": null,
       "last_activity": "2026-10-22T05:27:19Z"
+    },
+    "4": {
+      "status": "pending_claim",
+      "assignee": null,
+      "pending_claimer": "WUbin12343",
+      "score": 10,
+      "pr": null,
+      "last_activity": "2026-10-25T17:25:47Z"
     }
   },
-  "updated_at": "2026-10-23T15:52:06Z"
+  "updated_at": "2026-10-25T17:25:47Z"
 }
